@@ -1,0 +1,174 @@
+---
+title: "Family_dataset"
+author: "Khanin Sisaengsuwanchai"
+date: "1/27/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 0. Data check
+
+Download **family.rda** from my local directory
+
+```{r}
+load("/Users/khaninsi/Documents/Github/Khaninsi/Programming_skills/R/data/family.rda")
+```
+
+Check the correctness of the data.
+
+```{r}
+head(fheight)
+head(fweight)
+```
+
+
+## 1. Let's begin by converting our measurements to the correct units
+
+BMI is weight in kilograms divided by height in inches squared
+
+I will initially define functions that convert lbs to kg and inches_to_m by using conversion formula from Google.
+
+* [lbs_to_kg](https://www.google.com/search?q=lbs+to+kg&oq=lbs+to+&aqs=chrome.1.69i57j35i39j0i433i512j0i131i433i512l3j0i433i512j69i60.8638j0j7&sourceid=chrome&ie=UTF-8)
+* [inches_to_m](https://www.google.com/search?q=inches+to+meters&sxsrf=APq-WBuuqocLNR21K1pWPK1fV5xfYvW0Aw%3A1643690146269&ei=orj4YfDsD4vX5OUP0La12AQ&oq=inc&gs_lcp=Cgdnd3Mtd2l6EAMYADIECCMQJzIECCMQJzIECCMQJzIHCAAQsQMQQzIHCAAQsQMQQzIECAAQQzIHCAAQsQMQQzIECAAQQzIECAAQQzIECAAQQzoLCAAQgAQQsQMQgwE6DgguEIAEELEDEMcBEKMCOhEILhCABBCxAxCDARDHARCjAjoLCC4QgAQQxwEQowI6CggAELEDEIMBEENKBAhBGABKBAhGGABQAFjBAWDDDmgAcAJ4AIABwgKIAaoHkgEFMi0xLjKYAQCgAQHAAQE&sclient=gws-wiz)
+
+```{r}
+lbs_to_kg = function(weight_lbs) {
+  weight_kg = weight_lbs/2.205
+  return(weight_kg)
+}
+
+inches_to_m = function(height_inches) {
+  height_m = height_inches/39.37
+  return(height_m)
+}
+```
+
+Convert 175 pounds to kilograms
+```{r}
+weight_kg = lbs_to_kg(175)
+weight_kg
+```
+
+Convert 69 inches to meters.
+```{r}
+height_m = inches_to_m(69)
+height_m
+```
+
+Compute BMI
+```{r}
+bmi_1 = 79.36508/(1.752604^2)
+bmi_1
+```
+
+This time do all the computations at once
+```{r}
+bmi_2 = weight_kg/(height_m^2)
+bmi_2
+```
+
+Why are the answers slightly different?
+
+* This is because when I explicitly copy the values of weight_kg and height_m, they do not represent all decimal points of the data. In contrast, when we compute bmi_2, the weight_kg and height_m variables contain all decimal points in the data, leading to slightly different results.
+
+## 2. Let's convert all of the values for weight 
+
+Convert fweight from lbs to kg
+
+```{r}
+fweight_kg = lbs_to_kg(fweight)
+fweight_kg
+```
+
+Convert fheight from inches to m
+
+```{r}
+fheight_m = inches_to_m(fheight)
+fheight_m
+```
+
+Assign the return value of the computations to a new variable called bmi
+
+```{r}
+bmi = fweight_kg/(fheight_m^2)
+bmi
+```
+
+We can summarize bmi by calling the summary function.
+Notice it provides quartiles, mean, min, and max
+
+```{r}
+summary(bmi)
+```
+
+## 3. Answering questions using the data
+
+* What is the average weight for men over 70?
+
+```{r}
+mean(fweight[fgender=="m" & fage>70])
+```
+
+Average weight in lbs for men over 70 in lbs is 180\
+
+* What is the BMI for the tallest woman?
+
+```{r}
+bmi[fheight == max(fheight[fgender=="f"]) & fgender=="f"]
+```
+
+The BMI of the tallest woman is 28.88404.\
+
+* How many women are in family.rda? (use subsetting techniques)
+
+```{r}
+length(fgender[fgender=="f"])
+```
+
+There are 6 women in the family.rda.\
+
+* Using subsetting techniques, answer a new question you think a policy maker might find interesting about family.rda.
+
+An interesting question that I try to inform the policy maker is about the profile of family members who are overweight, leading to a high risk of getting certain diseases and cancers. For example, does overweight likely to occur in particular gender or age?\
+With this information, it helps the policy maker to understand the group of people that has a high risk of obesity and thus makes policies to help this particular group with high priority.  
+But first let's trying to understand the overall bmi data for each group.\
+Find, summarize, and count the data that are overweight
+
+```{r}
+overWeight = bmi[foverWt == TRUE]
+summary(overWeight)
+length(overWeight)
+```
+
+Find, summarize, and count the data that are not overweight
+
+```{r}
+not_overWeight = bmi[foverWt == FALSE]
+summary(not_overWeight)
+length(not_overWeight)
+```
+
+In this sample, we can clearly see the differences of these two groups. The average and median bmi of the overweight group is approximately 5 more than the average of the non-overweight group. Moreover, we have a slightly non-overweight individuals than overweight. Another interesting point is the cut-off of these two groups. It seems like that the bmi of 25 separates the overweight and non-overweight, which conforms with what CDC defines.
+<br/><br/>
+
+Let's check about the relationships of each gender and bmi 
+
+```{r}
+table(fgender[foverWt == TRUE])
+table(fgender[foverWt == FALSE])
+```
+
+Based on the availability of the data, we cannot see any clear patterns of overweight with gender. <br/><br/>
+
+Another point is to examine the age of these two groups.
+
+```{r}
+summary(fage[foverWt == TRUE])
+summary(fage[foverWt == FALSE])
+```
+
+Both median and mean of age in the overweight group roughly exceed the non-overweight group by 10.\
+As a result, I would inform the policy maker that the new policies should initially focus on the citizens who are more than 50 years old since they are more likely to be overweight.

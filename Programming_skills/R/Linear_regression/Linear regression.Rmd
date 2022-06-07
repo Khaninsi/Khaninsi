@@ -1,0 +1,475 @@
+---
+title: "Linear_regression"
+author: "Khanin Sisaengsuwanchai"
+date: "2/18/2022"
+output: pdf_document
+---
+
+# 1)
+
+## a) Perform data understanding before creating any model
+
+```{r}
+library(MASS)
+library(ISLR2)
+library(car)
+
+class(cars) # Show the class
+head(cars)  # Show top 6 rows
+dim(cars)  # Dimensions
+summary(cars)
+
+# Scatter plot 
+plot(cars, xlab = "Speed (mph)", ylab = "Stopping distance (ft)",
+     las = 1)
+# Speed (mph) and Stopping distance (ft) seem to have a linear relationship
+
+## Plot histogram to understand distribution of the data
+plot(density(cars$speed)) # Speed has a normal distribution with mean around 15 mph.
+plot(density(cars$dist)) # Distance has a normal distribution with positive skewness.
+
+## Calculate correlation for all variables in R to understand linear relationship
+cor(cars)
+# Speed and distance have a very high correlation with around 0.8, which 
+#indicates a strong linear relationship.
+
+```
+
+## b)
+```{r out.width = '100%'}
+knitr::include_graphics("/Users/khaninsi/Documents/Github/Khaninsi/Programming_skills/R/Linear_regression/images/linear_pop.png")
+```
+All variables in the above linear model live in unknowable world because these variables 
+are population parameters, which we cannot find explicitly. However, we want to estimate these variables based on the variables in the knowable world in the following equation. According to a), it is promising to get the accurate prediction of stopping distance because speed has a strong linear correlation with the dependent variable.
+Thus p-value should be much lower than 0.05, indicating that the linear relationship
+between independent and dependent variables are not by chance.
+
+## c)
+
+```{r out.width = '100%'}
+knitr::include_graphics("/Users/khaninsi/Documents/Github/Khaninsi/Programming_skills/R/Linear_regression/images/linear_samp.png")
+```
+
+The estimated model for linear regression that we will implement in the R programming.
+These variables live in the knowable world because we already have the value of dependent and independent variables, and thus we can estimate the beta hat.
+
+```{r}
+lm.fit =lm(dist~speed, data=cars) # fit linear regression on speed(X) with dist(Y)
+summary(lm.fit) 
+```
+
+According to the model, the intercept term does not make sense to interpret because it means the average stopping distance is -17.5 when the speed is equal to zero, which is not viable, but we need this term in order to make predictions.\
+The coefficients of speed is 3.9324, which would mean with every speed increases, the stopping distance would increase 3.9324 feet. Moreover, the p-value is strongly significant as it is much lower than 0.05 and aligns with the high correlation value showed in section (a).\
+Finally, the F-statistics is significantly larger than 1 and its p-value is a lot less than 0.05. This indicates that the as least one beta is non-zero.
+
+## d)
+To assess the fit of the model, we will use two methods.
+The first method is R-squared. To interpret the R-squared in this model, the R-squared of 0.6511 means that the speed can explain 65.11% of total variance in the stopping distance, which is considerably high.\
+Another measurement is residual standard error (RSE), which estimates standard error of irreducible error. It means that even if the model were correct and the true values of the unknown coefficients beta 0 and beta 1 were known exactly, any prediction of stopping distance on the basis of speed would still be off by about 15.38 ft on average, which is still acceptable if comparing with the average stopping distance of 42.98.
+
+# 2)
+
+```{r}
+set.seed(1)
+# Create a vector x in R that has 30 values going from 1 to 4 by 1/3 three times
+x = rep(seq(1,length=10,by=1/3), times=3)
+y = 5 + x + 4* x^2 # create a variable y as follows: 5 + x + 4*x^2
+y = y + rnorm(30, sd = 9) # a vector of noise drawn from N(0,9) to y
+plot(x)
+plot(y)
+```
+## a)  Fit a linear model predicting y from x. Interpret the coefficients and plot the residuals.
+
+```{r}
+lm.fit =lm(y~x) # fit linear regression on y with x
+summary(lm.fit) 
+```
+
+Based on the coefficients of x in the linear model, if x increases by 1, y would increase by 21.044, and the linear relationship between x and y does not occur by chance indicating by extremely low p-value. Moreover, the F-statistics also reinforces the t-value.
+
+```{r}
+# Plot residuals
+plot(fitted(lm.fit), resid(lm.fit))
+abline(0,0)
+```
+There is little pattern in the residuals, and  the variance of residuals is constant.
+However, there is a potential outlier when the residual is 20.
+
+
+## b) Create a scatterplot of the data. Add the line predicted by your model
+
+```{r fig.keep='all'}
+plot(x, y)
+abline(lm.fit, lwd = 3,col = 'red')
+```
+We can see that the linear model can reasonably explain the dependent variable using an independent variable, and doing a good job explaining the variance, which follows the high r-squared of 0.81. 
+
+## c) Given that you know the true underlying model in this case (in the unknowable world), how do you assess the linear model?
+
+Given that I know the model in unknowable world, I would compare beta and beta hat, and measure the irreducible error term using MSE or RSE to assess the accuracy of model.
+
+## d) Now fit the same model as in a) but include a squared term e.g. x^2 as well as x. Interpret the coefficients and plot the residuals.
+
+```{r}
+x2 = x^2
+lm.fit2 =lm(y ~ x + x2) # fit linear regression on y with x and x^2
+summary(lm.fit2) 
+```
+
+Based on the coefficients of x in the new linear model, if x increases by 1, y would decrease by 10.745. Similarly, if x2 increases by 1, y would increase by 6.358. However, the p-value of coefficients of intercept and x are all greater than 0.05, indicating that the linear relations of all variables with y occur by chance even though the F-statistics does not align with the t-statistics. With this information, I am of the opinion that the colinearity between x and x2 is the main reason of the inconsistent results because the correlation of x and x2 is extremely high (0.986).
+
+```{r}
+# Calculate correlation
+cor(data.frame(x, x2, y))
+```
+
+```{r}
+# Plot residuals
+plot(fitted(lm.fit2), resid(lm.fit2))
+abline(0,0)
+```
+
+The residual is more likely to be heteroscedasticity, which violates the constant variance rule.
+
+## e) Discuss each of the Potential Problems and determine whether they apply to this model. How about for your model from part a)?
+
+### The potential problem for model in part (a)\
+* Non-linearity of the Data: there is little pattern in the residuals.
+* Non-constant Variance of Error Terms: the variance of residuals is constant.
+* Outliers: one potential outlier when the residual is 20
+
+
+### The potential problem for model in part (b)\
+* Non-linearity of the Data: the relationship between the residuals and y is non-linear.
+* Non-constant Variance of Error Terms: the residual tends to be heteroscedasticity, which violate the constant variance rule. I can apply log Y or square root of Y to reduce the effect.
+* Outliers: there is no obvious outlier.
+* Collinearity: x and x2 have a strong correlation, which is 0.986. I can either select one of the predictor variables or combine into one variable.
+
+
+# 3) 
+
+```{r}
+# Load the "infants" dataset
+load(url("http://www.stodden.net/StatData/KaiserBabies.rda"))
+
+# Check the data
+names(infants)
+dim(infants)
+```
+
+```{r}
+# y = bwt (birth weight)
+# Density plot to check distribution of birth weight
+plot(density(infants$bwt), xlab = "Birth Weight (oz)",
+    main = "Male Babies, Oakland Kaisr in the 1960s")
+
+```
+
+The birth weight tends to be a normal distribution with mean = 120.
+
+```{r}
+## Understand the data 
+summary(infants)
+```
+
+## Forward Selection
+
+```{r}
+# Change from categorical data to numerical data
+infants.tranf = infants
+infants.tranf$ed    = as.integer(infants$ed)
+infants.tranf$smoke = as.integer(infants$smoke)
+infants.tranf$ded   = as.integer(infants$ded)
+infants.tranf$marital = as.integer(infants$marital)
+infants.tranf$number = as.integer(infants$number)
+infants.tranf$inc = as.integer(infants$inc)
+
+## Fill missing values for dht and dwt with mean of its value
+infants.tranf$dht[is.na(infants.tranf$dht)] <- mean(infants.tranf$dht, na.rm = T)
+infants.tranf$dwt[is.na(infants.tranf$dwt)] <- mean(infants.tranf$dwt, na.rm = T)
+## I fill the missing value because we will loose about 40% of data if we remove rows
+## that are null and I choose mean because it is a reasonable representation of data.
+## Additionally, we can neglect the columns that have small nulls. 
+
+# Recheck the manipulated data again
+summary(infants.tranf)
+```
+
+
+Find the miminum RSE of these model and pick the lowest one
+I choose RSE because RSE stems from RSS, and RSE is easier to compute from the model.
+
+```{r}
+
+lm.fitInf =lm(bwt~gestation, data=infants.tranf) # fit linear regression on bwt with gestation
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~parity, data=infants.tranf) # fit linear regression on bwt with parity
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~age, data=infants.tranf) # fit linear regression on bwt with age
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~ed, data=infants.tranf) # fit linear regression on bwt with ed
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~ht, data=infants.tranf) # fit linear regression on bwt with ht
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~wt, data=infants.tranf) # fit linear regression on bwt with wt
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~dage, data=infants.tranf) # fit linear regression on bwt with dage
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~ded, data=infants.tranf) # fit linear regression on bwt with ded
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~dht, data=infants.tranf) # fit linear regression on bwt with dht
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~dwt, data=infants.tranf) # fit linear regression on bwt with dwt
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~marital, data=infants.tranf) # fit linear regression on bwt with marital
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~inc, data=infants.tranf) # fit linear regression on bwt with inc
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~smoke, data=infants.tranf) # fit linear regression on bwt with smoke
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~number, data=infants.tranf) # fit linear regression on bwt with number
+sigma(lm.fitInf) 
+
+
+```
+
+```{r}
+# Pick gestation as a first variable because it gives the lowest RSE
+lm.fitInf1 =lm(bwt~gestation, data=infants.tranf) # fit linear regression on bwt with gestation
+summary(lm.fitInf1) 
+```
+
+```{r}
+## Iterate over next loop to find another variable
+lm.fitInf =lm(bwt~gestation + parity, data=infants.tranf)
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~gestation + age, data=infants.tranf)
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~gestation + ed, data=infants.tranf)
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~gestation + ht, data=infants.tranf)
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~gestation + wt, data=infants.tranf)
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~gestation + dage, data=infants.tranf)
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~gestation + ded, data=infants.tranf)
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~gestation + dht, data=infants.tranf)
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~gestation + dwt, data=infants.tranf)
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~gestation + marital, data=infants.tranf)
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~gestation + inc, data=infants.tranf)
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~gestation + smoke, data=infants.tranf)
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~gestation + number, data=infants.tranf)
+sigma(lm.fitInf) 
+```
+
+```{r}
+# Pick ht as a second variable because it gives the lowest RSE
+lm.fitInf2 =lm(bwt~gestation + ht, data=infants.tranf)
+
+## Check for p-value
+summary(lm.fitInf2) 
+```
+Since p-values for both variables are significantly less than 0.05 and adjusted R-squared , I will keep adding another variable.
+
+```{r}
+## Find next variable
+lm.fitInf =lm(bwt~gestation + ht + parity, data=infants.tranf)
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~gestation + ht + age, data=infants.tranf)
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~gestation + ht + ed, data=infants.tranf)
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~gestation + ht + wt, data=infants.tranf)
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~gestation + ht + dage, data=infants.tranf)
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~gestation + ht + ded, data=infants.tranf)
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~gestation + ht + dht, data=infants.tranf)
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~gestation + ht + dwt, data=infants.tranf)
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~gestation + ht + marital, data=infants.tranf)
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~gestation + ht + inc, data=infants.tranf)
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~gestation + ht + smoke, data=infants.tranf)
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~gestation + ht + number, data=infants.tranf)
+sigma(lm.fitInf) 
+```
+
+```{r}
+# Pick number as a second variable because it's model gives the lowest RSE
+lm.fit3 =lm(bwt~gestation + ht + number, data=infants.tranf)
+summary(lm.fit3) 
+```
+I will keep this variable because p-values of each variable is less than 0.05.
+
+```{r}
+## Start next iteration
+lm.fitInf =lm(bwt~gestation + ht + number + parity, data=infants.tranf)
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~gestation + ht + number + age, data=infants.tranf)
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~gestation + ht + number + ed, data=infants.tranf)
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~gestation + ht + number + wt, data=infants.tranf)
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~gestation + ht + number + dage, data=infants.tranf)
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~gestation + ht + number + ded, data=infants.tranf)
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~gestation + ht + number + dht, data=infants.tranf)
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~gestation + ht + number + dwt, data=infants.tranf)
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~gestation + ht + number + marital, data=infants.tranf)
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~gestation + ht + number + inc, data=infants.tranf)
+sigma(lm.fitInf) 
+
+lm.fitInf =lm(bwt~gestation + ht + number + smoke, data=infants.tranf)
+sigma(lm.fitInf) 
+
+```
+
+
+```{r}
+# Pick marital and check p-values
+lm.fit4 =lm(bwt~gestation + ht + number + marital, data=infants.tranf)
+summary(lm.fit4) 
+```
+
+Since the p-value of marital is more than 0.05, the null hypothesis has been rejected.
+Moreover, adjusted R-squared increases insignificantly from lm.fit3 (0.199) to lm.fit4 (0.233).
+For these reasons, I will stop iterate over independent variables because the stop condition has been met.
+
+```{r}
+## Finaly model 
+summary(lm.fit3) 
+```
+
+With the mull model, the birthweight of a baby is -92.10 oz. With a 100 of gestation, height, and number, the birthweight would increase 45.5 oz, 138 oz, and decrease 133 oz respectively. \
+The relationships of each variable do not occur with birthweight by chance because low extremely low p-values.\
+At least one variable has significant relationship with birthweight indicating with p-value of F-statistics less than 0.05. \
+Finally, only about 23% of total variance of baby's birthweight can be explained by this model.
+
+## Backward selection
+
+```{r}
+## Start with a model with all variables
+lm.backward =lm(bwt~., data=infants.tranf)
+summary(lm.backward) 
+```
+Since age has the highest p-value (0.96365), I will remove this variable.
+
+```{r}
+lm.backward =lm(bwt~. -age, data=infants.tranf)
+summary(lm.backward) 
+```
+Since ded has the highest p-value (0.93418), I will remove this variable.
+
+```{r}
+lm.backward =lm(bwt~. -age - ded, data=infants.tranf)
+summary(lm.backward) 
+```
+
+Since ed has the highest p-value (0.79141), I will remove this variable.
+
+```{r}
+lm.backward =lm(bwt~. -age - ded -ed, data=infants.tranf)
+summary(lm.backward) 
+```
+
+Since dage has the highest p-value (0.60510), I will remove this variable.
+
+```{r}
+lm.backward =lm(bwt~. -age - ded -ed -dage, data=infants.tranf)
+summary(lm.backward) 
+```
+
+Since dht has the highest p-value (0.4955), I will remove this variable.
+
+```{r}
+lm.backward =lm(bwt~. -age - ded -ed -dage -dht, data=infants.tranf)
+summary(lm.backward) 
+```
+
+Since inc has the highest p-value (0.47056), I will remove this variable.
+
+```{r}
+lm.backward =lm(bwt~. -age - ded -ed -dage -dht -inc, data=infants.tranf)
+summary(lm.backward) 
+```
+Since marital has the highest p-value (0.38284), I will remove this variable.
+
+```{r}
+lm.backward =lm(bwt~. -age - ded -ed -dage -dht -inc - marital
+                , data=infants.tranf)
+summary(lm.backward) 
+```
+
+As all variables have p-values less thab 0.05, I will stop backward selection.\
+
+**Interpretation of the model**\
+With the null model, the birthweight of a baby is -101.6 oz. With a 100 of gestation, parity, ht, wt,dwt, smoke, and number, the birthweight would increase 48.2 oz, 56.8 oz, 104.7 oz, 5.6 oz, 7.7 oz, 172.4 oz, and decrease 173.7 oz respectively. \
+The relationships of each variable do not occur with birthweight by chance because low extremely low p-values.\
+At least one variable has significant relationship with birthweight indicating with p-value of F-statistics less than 0.05. \
+Finally, only about 25% of total variance of baby's birthweight can be explained by this backward selection model.\
+
+To compare models forward and backward selection, they both have gestation, height, and number, but the backward selection model has parity, wt, dwt, and smoke as additional features. This is because parity, wt, dwt, and smoke have extremely low p-values, and thus we cannot remove them. \
+If I would have to choose between these two models, I would pick choose based on lower RSE and higher R-squared because low RSE means the predictor(y hat) is closed to the actual y and high R-squared indicates how the model explains the total variance of the predictor. 
+Therefore, I would choose the backward selection model because it has lower RSE and higher R-squared.

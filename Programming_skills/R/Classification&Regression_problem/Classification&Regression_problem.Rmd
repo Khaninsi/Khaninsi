@@ -1,0 +1,492 @@
+---
+title: 'Classification&Regression problem'
+author: "Khanin Sisaengsuwanchai"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  html_document: default
+urlcolor: blue
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# The setup chunk is run automatically before any other code to make sure package requirements are satisfied
+# library(tidyverse)
+# library(ggplot2)
+# Add more packages here
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(glmnet)
+library(leaps)
+library(gbm)
+```
+
+# 1) In this practice, I will predict party affiliation from voting records in house_votes dataset using tree-based methods.
+```{r}
+# Download the data from the website
+house_votes <- read.table("https://archive.ics.uci.edu/ml/machine-learning-databases/voting-records/house-votes-84.data", header=FALSE, sep = ',')
+
+# Change the col names to be understanable according to .names file
+colnames(house_votes) <- c('ClassName','hi','waterproject', 'adoption', 'physician', 'elsalvador', 'religious',
+'anti', 'aid', 'mx', 'immigration', 'synfuels', 'education', 'superfund', 'crime', 'dutyfree',
+'exportSF')
+```
+
+```{r}
+# Change the types of columns from characters to be categorical data
+names <- 1:17 # number of columns
+house_votes[,names] <- lapply(house_votes[,names] , factor)
+
+# head(house_votes) # Show top 6 rows
+summary(house_votes) # Describe the data
+# Note: All the columns are qualitative.
+```
+
+Partition data into train and testing dataset with 80:20 ratio 
+
+```{r}
+set.seed(7)
+# Use createDataPartition from the caret lib to help us split the data randomly
+trainRows <- createDataPartition(house_votes$ClassName, p=0.8, list=FALSE)
+train <- house_votes[trainRows,]
+test  <- house_votes[-trainRows,]
+# Check # of rows for train and test after spliting
+dim(train)
+dim(test) 
+head(train)
+# I believe 349 rows and 86 rows for training and test are adequate for training and verifying the models.
+```
+
+```{r}
+set.seed(5)
+votes.full_tree = rpart(ClassName ~ ., data = train, method="class", minsplit =5, minbucket = 2, 
+                        maxdepth = 10, cp=0) 
+# Fit the full tree
+# Visualize the full tree
+printcp(votes.full_tree)
+prp(votes.full_tree)
+
+# Assess the model via test dataset
+pred.full_tree = predict(votes.full_tree, newdata = test, type = "class")
+table(pred.full_tree, test$ClassName)
+mean(pred.full_tree != test$ClassName) # Test error rates
+
+# According to the full tree, the model selects only physicia, adoption, mx, synfuels, adoption
+# , anti, elsalvad variables as predictors because of their importance.
+# This means, according to the tree model, other variables do not help explain this phenomenon with the
+# same performance. The model performs really well with 4.65% test error.
+```
+
+Tree pruning
+
+```{r}
+set.seed(5)
+votes.pruned_tree<- prune(votes.full_tree,  cp=0.01)
+# Specify cost complexity parameter to be 0.01
+# Pruning
+
+# Visualize the pruned tree
+printcp(votes.pruned_tree)
+prp(votes.pruned_tree)
+
+# Assess the model with test dataset
+pred.pruned_tree = predict(votes.pruned_tree, newdata = test, type = "class")
+table(pred.pruned_tree, test$ClassName)
+mean(pred.pruned_tree != test$ClassName) # Test error rates
+
+# According to the pruned tree with cost complexity parameter to be 0.01, 
+# the model has only 6 terminal nodes from 8.
+# The model performs really well with 4.65% test error that is the same as the full tree.
+```
+
+```{r}
+# Given a new house member: n,n,n,y,y,y,y,n,n,y,n,y,n,y,n,n. What party does your tree predict for this member?
+
+dim(test)
+# Add a new row
+test[nrow(test) + 1,] = as.factor(c("democrat", "n", "n", "n", "y", "y", "y", "y", "n", "n", "y", "n", "y", "n", 
+                          "y", "n", "n"))
+# Please ignore the first column (democrat). It is only a random variable.
+# Show the added row
+test[nrow(test),]
+```
+
+```{r}
+# Predict
+predict(votes.pruned_tree, newdata = test[nrow(test),], 
+        type = "class") # Predict only a new row
+
+## According to the pruned tree model, it shows that the given voting data votes republican.
+```
+
+# 2) In the second practice, I will predict the number of rings on the abalone shell on abalone dataset using regression methods.
+
+```{r}
+# Download abalone data
+abalone <- read.table("https://archive.ics.uci.edu/ml/machine-learning-databases/abalone/abalone.data", header=FALSE, sep=',')
+
+# Change the col names to be understanable according to .names file
+colnames(abalone) <- c('Sex','Length','Diameter', 'Height', 'Whole_weight', 'Shucked_weight', 'Viscera_weight',
+'Shell_weight', 'Rings')
+
+# Change the type to be qualitative for sex
+abalone$Sex = as.factor(abalone$Sex)
+
+# Check datatype of all columns
+sapply(abalone, class)
+head(abalone)
+```
+
+```{r}
+# Partition the data with 3133 training dataset observations and 1044 test observations
+set.seed(7)
+train_indices <- sample(nrow(abalone), 3133)
+
+abalone.train <- abalone[train_indices, ] #select train
+Rings.train   <- abalone$Rings[train_indices]
+
+abalone.test <- abalone[-train_indices, ] # select test
+Rings.test   <- abalone$Rings[-train_indices]
+
+# Check the dim of the data
+dim(abalone.train)
+dim(abalone.test)
+```
+
+## Explore the data
+
+```{r}
+summary(abalone)
+# According to the sumaary function, there seem to have a lot of outliers in Height, Whole_weight,
+# Shucked_weight, Viscera_weight, Shell_weight, and Rings. I will try to investigate further using correlation
+# and box plots.
+```
+
+```{r}
+# Correlation plot
+cor(abalone[, -1])
+#pairs(abalone)
+# According to the correlation, it is more likely that predictors have linear relationship with rings,
+# indicating by quite high correlation. However, many variables have high collinearity.
+
+# Therefore, I will use scatter plot on Rings with Shell_weight, Length, and Diameter to 
+# verify such linear relationships.
+
+pairs(abalone[, c(2,3,8,9)])
+
+# As I expected, Rings with other 3 variables seem to have linear relationship, and Length
+# and Diameter have a very high correlation value.
+```
+##  Boxplot
+```{r}
+
+# Height, Whole_weight,
+# Shucked_weight, Viscera_weight, Shell_weight, and Rings
+
+
+boxplot(abalone$Height, abalone$Whole_weight, abalone$Shucked_weight, abalone$Viscera_weight,
+        abalone$Shell_weight,
+main = "Boxplot for some variables",
+names = c("Height", "Who_weight", "Shu_weight", "Visc_weight", "Sh_weight"),
+horizontal = TRUE,
+notch = TRUE
+)
+
+# As I expected, these predictors have a lot of outliers.
+
+boxplot(Rings~Sex,
+data=abalone,
+main="Rings with sex",
+xlab="Sex",
+ylab="Rings",
+col="green",
+border="brown"
+)
+
+# Sex has an affect on Rings, especially with I sex.
+```
+## Fit linear regression with the first 5 predictors on training dataset (3,133 datapoints)
+```{r}
+lm.fit1 = lm(Rings ~ Sex+Length+Diameter+Height+Whole_weight, data = abalone.train)
+summary(lm.fit1)
+plot(lm.fit1)
+# According to the linear model, specifically for Sex variable, I use Female as a base line
+# to handle the nominal variable. It's coefficient is added into the intercept of the model.
+
+# Only about 36% of variance can be explained by this model, indicated by R-squared.
+# Finally, Whole_weight has a high p-value and thus we might remove this variable when we do 
+# feature selection.
+
+```
+## Fit the linear model on all 8 variables
+
+```{r}
+lm.fit2 = lm(Rings ~ ., data = abalone.train)
+summary(lm.fit2)
+plot(lm.fit2)
+# After using all 8 variables, the model's performance increases significantly.
+# The adjusted R-squared, indicating how much variance the model can explain, 
+# increases from approximately 36% to 53%, and RSE reduces from about 2.57 to 2.215.
+
+# Note: I use adjusted R-squared because the normal R-squared will always keep increasing 
+# when we add more predictors, but adjusted R-squared does not due to penalty terms.
+```
+## Quadratic regression models is the first 5 and first 8 predictors
+
+```{r}
+# Fit a quadratic model of the first 5 predictors 
+fit.q5 = lm(Rings ~ Sex+ poly(Length, 2)+ poly(Diameter, 2)+ poly(Height, 2)
+            + poly(Whole_weight, 2), data = abalone.train)
+summary(fit.q5) 
+plot(fit.q5)
+# Fit a quadratic model of the all 8 predictors 
+fit.q8 = lm(Rings ~ Sex+ poly(Length, 2)+ poly(Diameter, 2)+ poly(Height, 2)
+            + poly(Whole_weight, 2) + poly(Shucked_weight, 2) + poly(Viscera_weight, 2) 
+            + poly(Shell_weight, 2), data = abalone.train)
+summary(fit.q8) 
+plot(fit.q8)
+# Again, to handle the nominal variable, I use Female as a base line for dummy variables.
+# It's coefficient is added into the intercept of the models.
+
+# After adding the polynomial terms in both model, adjusted R-squared are increased and 
+# RSEs are decreased.
+
+# Note: I cannot make the Sex variable becomes polynomial because it is a qualitative data.
+```
+## Ridge regression
+
+```{r}
+# Select 784 observations from training dataset (Validation dataset)
+
+set.seed(7)
+valid_indices <- sample(nrow(abalone.train), 784)
+
+abalone.valid  <- abalone.train[valid_indices, ] #select valid observations
+abalone.train2 <- abalone.train[-valid_indices, ] #select the new train observations
+Rings.valid    <- abalone.train$Rings[valid_indices]
+
+# Check the dim of the data
+dim(abalone.valid)
+dim(abalone.train2)
+length(Rings.valid)
+```
+
+```{r}
+# Generate a new training dataset for ridge regression
+x <- model.matrix(Rings ~ ., abalone.train)[, -1]
+y <- abalone.train$Rings
+
+# Split train and test randomly
+set.seed(1)
+train2.indice <- sample(nrow(abalone.train), 2349)
+
+x.train <- x[train2.indice,]
+y.train <- y[train2.indice]
+x.valid <- x[-train2.indice,]
+y.valid <- y[-train2.indice]
+
+dim(x.train)
+length(y.train)
+dim(x.valid)
+length(y.valid)
+
+
+# Fit the ridge regression model
+grid <- 10^seq(10, -2, length = 100) # Create a set of lambdas
+ridge.mod <- glmnet(x.train, y.train, alpha = 0, lambda = grid)
+dim(coef(ridge.mod)) # 10 variables and 100 lambda
+
+```
+
+```{r}
+# Run a for loop to choose the best lambda
+lambda_records = data.frame(lambda = numeric(0), MSE = numeric(0))
+
+# Use the optimal lambda and calculate MSE
+errorCal.ridge = function(ridge_model, vali, y_vali, lambda_val){
+  ridge.pred <- predict(ridge_model, s = lambda_val, newx = vali)
+  # Bundle chosen lambda and MSE
+  #print(mean((ridge.pred - y_vali)^2))
+  MSE_by_lamb = data.frame("Lambda" = lambda_val, "MSE" = mean((ridge.pred - y_vali)^2))
+  # print(MSE_by_lamb)
+  return (MSE_by_lamb)
+}
+
+for (lamb in grid){
+  lambda_records = rbind(lambda_records, errorCal.ridge(ridge.mod, x.valid, y.valid, lamb))
+}
+
+lambda_records
+
+# Plot the MSE
+plot(x=log(lambda_records$Lambda), y=lambda_records$MSE, type="b")
+```
+```{r}
+# Since it is hard to read the best lamb by eyes, I will use a build-in cv function
+# to help choose the best lambda.
+set.seed(1)
+cv.out <- cv.glmnet(x.train, y.train, alpha = 0) 
+plot(cv.out)
+bestlam <- cv.out$lambda.min
+bestlam
+
+# The best lambda is 0.1977713.
+
+# Use the optimal lambda and calculate MSE
+ridge.pred <- predict(ridge.mod, s = bestlam, newx = x.valid)
+mean((ridge.pred - y.valid)^2)
+
+# The MSE with the best lambda is 5.33.
+```
+## Let R select a model over the 3133 data point, using its “stepwise” automatic model selection model.
+
+```{r}
+# I am going to use forward stepwise selection.
+regfit.fwd <- regsubsets(Rings ~ ., data = abalone.train, nvmax = 9, method = "forward")
+regfit.fwd_sum <- summary(regfit.fwd)
+regfit.fwd_sum
+
+par(mfrow = c(2, 2))
+plot(regfit.fwd_sum$rss, xlab = "Number of Variables",
+     ylab = "RSS", type = "l")
+plot(regfit.fwd_sum$adjr2, xlab = "Number of Variables",
+     ylab = "Adjusted RSq", type = "l")
+
+max_adjr = which.max(regfit.fwd_sum$adjr2) 
+#identify the location of the maximum point of a vector based on adjusted r-squared
+max_adjr
+
+# According to these plots, the forward stepwise chooses the number of variables to be 7 because 
+# it is the first point where RSS is the lowest and adjusted R-squared is highest.
+
+# Show intercept of the selected model
+coefi <- coef(regfit.fwd, max_adjr)
+coefi
+
+# Test the select model with training observations
+train.mat <- model.matrix(Rings ~ ., data = abalone.train) 
+# generate test dataset to be the same format with the model
+pred.fwd_train <- train.mat[, names(coefi)] %*% coefi 
+MSE.fwd_train = mean((Rings.train - pred.fwd_train)^2) # Calculate MSE
+MSE.fwd_train
+```
+## Use an improved model
+
+```{r}
+# According to correlation, these data are not fully linear (with correlation values 
+# of predictors and y are less than 0.6).
+# Therefore, I believe tree-based methods could further improve the accuracy.
+
+# I will use a boosting model with gbm because it is the best model among the tree-based family.
+# Train the boosting model with shrinkage
+boost.abalone <- gbm(Rings ~ ., data = abalone.train, distribution = "gaussian", 
+                    n.trees = 5000, interaction.depth = 4, shrinkage = 0.01, 
+                    verbose = F) 
+# Shrinkage is the learning rate parameter and this model depends on slow learning concept.
+
+
+yhat.boost_train <- predict(boost.abalone,
+                      newdata = abalone.train, n.trees = 5000)
+MSE.boost_train <- mean((yhat.boost_train - Rings.train)^2) # MSE of training data
+MSE.boost_train
+```
+
+## Compare and summarize models' performance 7 models in total
+
+```{r}
+
+df.sum_acc = data.frame("method"=as.factor(0), "MSE_train"=as.numeric(0), 
+                        "MSE_test"=as.numeric(0))
+
+# 1. lm1
+# Calculate training errors (3133 observations)
+pred.lm_fit1 <- predict(lm.fit1)
+MSE.lm_fit1_train <- mean((Rings.train - pred.lm_fit1)^2)
+# Calculate test errors (1044 observations)
+pred.lm_fit1 <- predict(lm.fit1, newdata = abalone.test)
+MSE.lm_fit1_test <- mean((Rings.test - pred.lm_fit1)^2)
+
+# Store the MSE
+df.sum_acc = data.frame("method"="lm.fit1", "MSE_train"=MSE.lm_fit1_train, 
+                        "MSE_test"=MSE.lm_fit1_test)
+
+# 2. lm2
+# Calculate training errors (3133 observations)
+pred.lm_fit2 <- predict(lm.fit2)
+MSE.lm_fit2_train <- mean((Rings.train - pred.lm_fit2)^2)
+# Calculate test errors (1044 observations)
+pred.lm_fit2 <- predict(lm.fit2, newdata = abalone.test)
+MSE.lm_fit2_test <- mean((Rings.test - pred.lm_fit2)^2)
+
+# Store the MSE 
+df.sum_acc[nrow(df.sum_acc) + 1,] <- c("lm.fit2", MSE.lm_fit2_train, MSE.lm_fit2_test)
+
+# 3. q5
+# Calculate training errors (3133 observations)
+pred.q5 <- predict(fit.q5)
+MSE.q5_train <- mean((Rings.train - pred.q5)^2)
+# Calculate test errors (1044 observations)
+pred.q5 <- predict(fit.q5, newdata = abalone.test)
+MSE.q5_test <- mean((Rings.test - pred.q5)^2)
+
+# Store the MSE 
+df.sum_acc[nrow(df.sum_acc) + 1,] <- c("q5", MSE.q5_train, MSE.q5_test)
+
+# 4. q8
+# Calculate training errors (3133 observations)
+pred.q8 <- predict(fit.q8)
+MSE.q8_train <- mean((Rings.train - pred.q8)^2)
+# Calculate test errors (1044 observations)
+pred.q8 <- predict(fit.q8, newdata = abalone.test)
+MSE.q8_test <- mean((Rings.test - pred.q8)^2)
+
+# Store the MSE 
+df.sum_acc[nrow(df.sum_acc) + 1,] <- c("q8", MSE.q8_train, MSE.q8_test)
+
+
+# 5. Ridge regression
+# I will not calculate the training errors of ridge regression because
+# this model is trained on 2349 observations, but other model are used 3133 observations.
+# Comparing performance on training data with this model is not to compare apple to apple.
+
+# Calculate test errors (1044 observations)
+test.mat <- model.matrix(Rings ~ ., data = abalone.test) 
+ridge.pred_test <- predict(ridge.mod, s = bestlam, newx = test.mat[, -1])
+MSE.ridge_test = mean((ridge.pred_test - Rings.test)^2)
+# Use the optimal lambda and calculate MSE
+
+# Store the MSE 
+df.sum_acc[nrow(df.sum_acc) + 1,] <- c("ridge", 0, MSE.ridge_test) 
+# Note: I put the MSE of training the ridge model as a dummy. You can ignore this value.
+
+# 6. Forward stepwise model
+# Test the select model with test observations
+# Generate test dataset to be the same format with the model
+pred.fwd_test <- test.mat[, names(coefi)] %*% coefi 
+MSE.fwd_test = mean((Rings.test - pred.fwd_test)^2) # Calculate MSE
+
+# Store the MSE 
+df.sum_acc[nrow(df.sum_acc) + 1,] <- c("fwd_stepwise", MSE.fwd_train, MSE.fwd_test) 
+# Note: I already calculated MSE.fwd_train in g)
+
+
+# 7. GBM
+yhat.boost_test <- predict(boost.abalone,
+                    newdata = abalone.test, n.trees = 5000)
+MSE.boost_test <- mean((yhat.boost_test - Rings.test)^2) # This is the best performance so far.
+
+# Store the MSE 
+df.sum_acc[nrow(df.sum_acc) + 1,] <- c("GBM", MSE.boost_train, MSE.boost_test) 
+# Note: I already calculated MSE.boost_train in h)
+
+df.sum_acc
+```
+
+```{r}
+df.sum_acc$method = as.factor(df.sum_acc$method)
+plot(df.sum_acc$method, df.sum_acc$MSE_train, xlab = "Method", ylab = "MSE training") 
+plot(df.sum_acc$method, df.sum_acc$MSE_test, xlab = "Method", ylab = "MSE test") # plot 
+
+# According to the plot GBM performs best in MSE training but q8 has the lowest in MSE test.
+```

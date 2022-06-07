@@ -1,0 +1,321 @@
+---
+title: "Classification_models_1"
+author: "Khanin Sisaengsuwanchai"
+date: "3/23/2022"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggcorrplot)
+library(MASS)
+library(e1071)
+```
+
+The goal is to help answer whether maternal smoking has an effect on birth weight, applying LDA, QDA, NaiveBayes .
+
+# Let's start by loading the data
+```{r}
+# Load the "infants" dataset
+load(url("http://www.stodden.net/StatData/KaiserBabies.rda"))
+
+# Check the data
+names(infants)
+dim(infants)
+
+## Understand the data 
+summary(infants)
+```
+According to the objective to examine the effect of maternal smoking on birthweight, I would instead use birth weight to understand the effect and predict maternal smoking because LDA, QDA, and NaiveBayes are classifiers not regression problem.
+
+## Data preprocessing
+
+```{r}
+## Since dht and dwt have a lot of nulls,  fill missing values for dht and dwt with mean of its value
+infants$dht[is.na(infants$dht)] <- mean(infants$dht, na.rm = T)
+infants$dwt[is.na(infants$dwt)] <- mean(infants$dwt, na.rm = T)
+infants$wt[is.na(infants$wt)] <- mean(infants$wt, na.rm = T)
+
+# Remove null from the data
+infants = infants[complete.cases(infants), ]
+
+# Recheck the data manipulation
+summary(infants)
+dim(infants) # The rows go down from 1236 to 1192
+
+```
+
+Now all the NAs are gone
+
+## Data understanding
+
+
+```{r}
+# A scatter plot that shows the points in groups according to their "maternal smoke"
+plot(infants$bwt,
+pch = 16,
+col = as.numeric(infants$smoke)
+)
+```
+Based on the plot, there is no clear patterns between maternal smoke and birthweight.\
+
+Therefore, we need to investigate the relationships using other statistical methods and models.\
+
+```{r}
+# Correlation plot with qualitative data removal
+coorelation = cor(infants[,  -c(5, 9, 12, 13, 14, 15)])
+coorelation
+```
+
+According to the correlation of the quantitative data, age and dage with a correlation value of 0.82
+and dht and dwt with a correlation value of 0.54 have significant correlation values, therefore I will choose only age and dht as  representatives because I can randomly pick one from the group.\
+
+Initially, we need to split the data into 10-folds cross validation since this k neither suffers from excessively high bias nor very high variance compared to LOOCV.
+
+```{r}
+library(caret) # I’ll use the caret package to slice the dataset into 10 folds
+set.seed(1)
+infants_folds = createFolds(infants$smoke, k = 10)
+# From the data of 1,192 rows, I will split the data into 10 training and test dataset
+# when k = 10. Each training dataset has 1111 datapoints, and test dataset has 120 datapoints.
+
+infants_folds[1:3] # Note that the values of this list is index, not the actual values.
+```
+
+## 1. LDA
+Implement a function for LDA that uses the K-fold dataset.
+```{r}
+library(MASS)
+## Create a function that takes the index of each fold, fit and predict using LDA 
+cV.LDA = function(complete_data, i){
+  
+  # Training data: not in fold indices
+  train = complete_data[-i, ]
+  
+  # Test data: all data in the fold indices
+  test = complete_data[i, ]
+  
+  # fit all variables except dage and dwt due to high correlation
+  # ded and ed are very similar so I pick one of them
+  lda.fit = lda(smoke ~ . - dage - dwt - ded, data = train)
+  
+  # apply the model to the test dataset and obtain predicted classes
+  lda.class = predict(lda.fit, test)$class
+
+  # return a data.frame with two columns containing the cross-validated
+  # predictions for the fold and the corrsponding reference observations
+  return(data.frame(Prediction = lda.class,
+                    Actual = test$smoke)) # Obtain actual class from the test dataset
+}
+```
+
+
+```{r}
+# Check test errors for only one class
+cV_one_fold = cV.LDA(infants, infants_folds[[1]])
+
+# Show a confusion matrix and compute test errors 
+table(cV_one_fold$Prediction, cV_one_fold$Actual)
+mean(cV_one_fold$Prediction != cV_one_fold$Actual)  # Error rate
+```
+
+Calculate test errors for all cross validation dataset with k = 10
+
+```{r}
+
+# create empty data.frame
+lda.cV_all_folds = data.frame(Prediction = numeric(0), Reference = numeric(0))
+
+for(i in infants_folds){
+  # add the rows of the fold
+  lda.cV_all_folds = rbind(lda.cV_all_folds, cV.LDA(infants, i))
+}
+
+# Show a confusion matrix and compute test errors 
+table(lda.cV_all_folds$Prediction, lda.cV_all_folds$Actual)
+mean(lda.cV_all_folds$Prediction != lda.cV_all_folds$Actual)  # Error rate
+
+```
+
+## 2. QDA
+Implement a function for QDA that uses the K-fold dataset.
+
+```{r}
+## Create a function that takes the index of each fold, fit and predict using QDA 
+cV.QDA = function(complete_data, i){
+  
+  # Training data: not in fold indices
+  train = complete_data[-i, ]
+  
+  # Test data: all data in the fold indices
+  test = complete_data[i, ]
+  
+  # fit a model using the training dataset
+  # I choose to remove all qualitative variables because the QDA model gives an error
+  qda.fit = qda(smoke ~ . - dage - dwt -ed -ded -marital -inc -number, data = train)
+  
+  # apply the model to the test dataset and obtain predicted classes
+  qda.class = predict(qda.fit, test)$class
+
+  # return a data.frame with two columns containing the cross-validated
+  # predictions for the fold and the corrsponding reference observations
+  return(data.frame(Prediction = qda.class,
+                    Actual = test$smoke)) # Obtain actual class from the test dataset
+}
+
+# Call the above function, train, and predict using QDA
+
+# create empty data.frame
+qda.cV_all_folds = data.frame(Prediction = numeric(0), Reference = numeric(0))
+
+for(i in infants_folds){
+  # add the rows of the fold
+  qda.cV_all_folds = rbind(qda.cV_all_folds, cV.QDA(infants, i))
+}
+
+# Show a confusion matrix and compute test errors 
+table(qda.cV_all_folds$Prediction, qda.cV_all_folds$Actual)
+mean(qda.cV_all_folds$Prediction != qda.cV_all_folds$Actual)  # Error rate
+
+```
+
+## 3.
+Implement a function for NaiveBayes that uses the K-fold dataset.
+
+```{r}
+library(e1071)
+## Create a function that takes the index of each fold, fit and predict using NaiveBayes
+
+cV.NB = function(complete_data, i){
+  
+  # Training data: not in fold indices
+  train = complete_data[-i, ]
+  
+  # Test data: all data in the fold indices
+  test = complete_data[i, ]
+  
+  # fit all variables except dage and dwt due to high correlation
+  # ded and ed are very similar so I pick one of them
+  nb.fit = naiveBayes(smoke ~ . - dage - dwt -ded, data = train)
+  
+  # apply the model to the test dataset and obtain predicted classes
+  nb.class = predict(nb.fit, test)
+
+  # return a data.frame with two columns containing the cross-validated
+  # predictions for the fold and the corrsponding reference observations
+  return(data.frame(Prediction = nb.class,
+                    Actual = test$smoke)) # Obtain actual class from the test dataset
+}
+
+# Call the above function to train and predict using NaiveBayes
+
+# create empty data.frame
+nb.cV_all_folds = data.frame(Prediction = numeric(0), Reference = numeric(0))
+
+for(i in infants_folds){
+  # add the rows of the fold
+  nb.cV_all_folds = rbind(nb.cV_all_folds, cV.NB(infants, i))
+}
+
+# Show a confusion matrix and compute test errors 
+table(nb.cV_all_folds$Prediction, nb.cV_all_folds$Actual)
+mean(nb.cV_all_folds$Prediction != nb.cV_all_folds$Actual)  # Error rate
+```
+
+# Interpretation
+
+```{r}
+# These are the test errors of the methods.
+#         Test errors
+# 1. LDA  0.1879195
+# Interpretation: the overall accuracy of this model is about 81%, which is quite decent.
+# Therefore, according to this model, birthweight together with additional factors
+# perform well in predicting and explaining maternal smoking.
+# Similarly, we can infer that maternal smoking has an impact on birthweight because of 
+# a reverse effect.
+
+#         Test errors
+# 2. QDA  0.5025168
+# Interpretation: the overall accuracy of this model is about 50%, which is closed to 
+# random chance. According to this model, birthweight together with additional factors do not have 
+# significant effects on maternal smoking, and therefore maternal smoking does not have
+# an impact on birthweight with non-linear relationship.
+
+#         Test errors
+# 3. NB   0.1711409
+# Interpretation: the overall accuracy of this model is about 83%, which is slightly better 
+# Therefore, according to this model, birthweight together with additional factors
+# perform well in predicting and explaining maternal smoking.
+# Similarly, we can infer that maternal smoking has an impact on birthweight because of 
+# a reverse effect.
+```
+
+To compare the performance of these models, I would use test errors as a measurement.\
+NaiveBayes is the most accurate model of these three because it has the lowest test errors of 0.1711409, following by LDA which has test errors of 0.1879195 and QDA that performs poorly with test errors of 0.5025168.\
+What make differences between these models are the assumptions that each model holds. To be more specific, LDA assumes that each class from 1...K has a common covariance and that the observations are drawn from a multivariate Gaussian distribution, leading to potentially high bias and low variance trade-off. Even though QDA assumes that the observations are drawn from a multivariate Gaussian distribution, unlike LDA, it does not each class has its own covariance. Finally, NaiveBayes only assumes that within the kth class, the p predictors are independent.
+As far as I'm concerned, these methods work well when their assumptions hold true, which is, in this case, each class seems to has its own covariance and the predictors are independent. 
+
+However, I am of the opinion that the performance of LDA and NaiveBayes models is quite decent, except only the QDA method. 
+As of now, I include only numerical data into the model because it gives errors "some group is too small for 'qda'".
+Therefore, I am going to improve only qda by using dummy variables to represent qualitative predictors. Hopefully, it will solve the error.\
+
+I am going to use 'fastDummies' to handle the work.
+
+```{r}
+library('fastDummies')
+
+infants.tranf <- dummy_cols(infants, select_columns = c('ed', 'marital', 'inc' , 'number'),
+           remove_selected_columns = TRUE)
+
+head(infants.tranf)
+```
+
+## Redefine variables in QDA with the dummy variables
+
+```{r}
+## Create a function that takes the index of each fold, fit and predict using QDA 
+cV.QDA = function(complete_data, i){
+  
+  # Training data: not in fold indices
+  train = complete_data[-i, ]
+  
+  # Test data: all data in the fold indices
+  test = complete_data[i, ]
+  
+  # fit a model using the training dataset
+  # I choose to remove all qualitative variables expect smoke because the QDA model gives an error
+  qda.fit = qda(smoke ~ . - dage - dwt -ded, data = train)
+  
+  # apply the model to the test dataset and obtain predicted classes
+  qda.class = predict(qda.fit, test)$class
+
+  # return a data.frame with two columns containing the cross-validated
+  # predictions for the fold and the corrsponding reference observations
+  return(data.frame(Prediction = qda.class,
+                    Actual = test$smoke)) # Obtain actual class from the test dataset
+}
+
+# Call the above function, train, and predict using QDA
+
+# create empty data.frame
+#qda.cV_all_folds = data.frame(Prediction = numeric(0), Reference = numeric(0))
+
+#for(i in infants_folds){
+  # add the rows of the fold
+  #qda.cV_all_folds = rbind(qda.cV_all_folds, cV.QDA(infants.tranf, i))
+#}
+
+# Show a confusion matrix and compute test errors 
+#table(qda.cV_all_folds$Prediction, qda.cV_all_folds$Actual)
+#mean(qda.cV_all_folds$Prediction != qda.cV_all_folds$Actual)  # Error rate
+
+
+
+## I still get this error so I need to comment the code above.
+# Error in qda.default(x, grouping, ...) : 
+# some group is too small for 'qda'
+```
+Unfortunately, I still get the same errors, meaning the dummy variables did not help solve the error. Therefore, I would recommend to use other methods instead of qda to fit the data in order to improve the model performance.

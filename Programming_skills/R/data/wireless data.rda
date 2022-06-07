@@ -1,0 +1,36 @@
+w = read.table ("http://www.stanford.edu/~vcs/StatData/wireless.txt" , header = TRUE)
+class(w)
+dim(w)  # Measurements are taken at 254 locations in the building
+names(w)
+head(w)
+summary(w$S1) 
+w
+
+X=rep(w$x,5)
+Y=rep(w$y,5)
+ap=rep(1:5,each=nrow(w))
+SS=c(w$S1,w$S2,w$S3,w$S4,w$S5)
+
+
+ap
+names(ap)
+class(ap)
+length(ap)
+is.vector(ap)
+ap[1,"x"]
+
+
+D1=sqrt(   (w$x-w[1,"x"])^2 + (w$y -w[1,"y"])^2) # I changed ap to w
+D2=sqrt(    (w$x-w[2,"x"])^2+ (w$y - w[2,"y"])^2)
+D3=sqrt(    (w$x-w[3,"x"])^2+ (w$y - w[3,"y"])^2)
+D4=sqrt(    (w$x-w[4,"x"])^2+ (w$y - w[4,"y"])^2)
+D5=sqrt(   (w$x-w[5,"x"])^2+ (w$y - w[5,"y"])^2)
+
+Dist = c(D1, D2, D3, D4, D5)
+newW = data.frame(x = X, y = Y, ap, SS, Dist)
+
+newW
+
+dim(newW)
+head(newW)
+tail(newW)

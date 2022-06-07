@@ -1,0 +1,214 @@
+---
+title: 'Tree-based models'
+author: "Khanin Sisaengsuwanchai"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  html_document: default
+urlcolor: blue
+---
+
+## In this practice, I will compare different methods for generating a classification tree.
+
+a) Randomly split the titanic dataset into test and train components.
+```{r}
+# Load Titanic dataset
+load(url("https://stodden.net/StatData/titanic.rda"))
+
+# Data exploration
+summary(titanic)
+
+# Remarks: 
+# 1. Many columns are integer, not categorical --> need to be changed 
+# 2. age and fare have NAs --> Fill the missing age with its mean, remove an NA of fare, and remove the body column
+
+# Data pre-processing
+titanic$survived <- as.factor(titanic$survived) # Change the type of survived
+titanic$pclass   <- as.factor(titanic$pclass) # Change the type of survived
+titanic$sex   <- as.factor(titanic$sex) # Change the type of survived
+titanic$sibsp   <- as.factor(titanic$sibsp) # Change the type of survived
+titanic$parch   <- as.factor(titanic$parch) # Change the type of survived
+titanic$embarked   <- as.factor(titanic$embarked) # Change the type of survived
+
+
+titanic$age[is.na(titanic$age)] <- mean(titanic$age, na.rm = T) # fill the missing values of age
+titanic = titanic[, -c(3, 8, 10, 12, 13, 14)] # Remove the name, ticket, cabin, boat, body, and home.dest columns
+titanic = titanic[complete.cases(titanic), ] # Remove remaining 1 NA rows 
+
+# Recheck the changes
+summary(titanic)
+
+set.seed(1)
+# I would split training and test data into 80:20
+train <- sample(1:nrow(titanic), nrow(titanic) * 0.8)
+titanic.test <- titanic[-train, ]
+survived.test <- titanic$survived[-train]
+
+
+head(titanic.test)
+head(survived.test)
+```
+b) Fit a classification tree to predict survival of the titanic accident. Using a full tree and a pruned tree.
+```{r}
+library(tree) 
+# Fit the full tree
+set.seed(2)
+tree.titanic <- tree(survived ~ ., titanic,
+                      subset = train)
+tree.pred <- predict(tree.titanic, titanic.test,
+                     type = "class")
+table(tree.pred, survived.test)
+mean(tree.pred != survived.test) # Test error rates
+
+plot(tree.titanic)
+text(tree.titanic, pretty = 0)
+
+```
+
+```{r}
+# Fit the pruned tree
+set.seed(7)
+cv.titanic <- cv.tree(tree.titanic, FUN = prune.misclass) # Prune with cross-validation errors
+
+# Plot the number of terminal node with the cv errors
+par(mfrow = c(1, 2))
+plot(cv.titanic$size, cv.titanic$dev, type = "b") 
+# When we prune the trees, it introduces bias but decreases variance.
+
+prune.titanic <- prune.misclass(tree.titanic, best = 4) # Select # of tree from the cv where the errors drop the most
+plot(prune.titanic)
+text(prune.titanic, pretty = 0)
+
+# Predict and find errors
+prune.pred <- predict(prune.titanic, titanic.test, type = "class")
+table(prune.pred, survived.test)
+mean(prune.pred != survived.test) # Test error rates
+
+# After pruning, the test errors slightly increase from 20.22% to 21.76%
+```
+c) Now try bagging to fit a classification tree.
+```{r}
+library(randomForest)
+set.seed(1)
+bag.titanic <- randomForest(survived ~ ., data = titanic, subset = train, mtry = 7, importance = TRUE)
+# mtry = 7 means all predictors are being used, which are bagging.
+bag.titanic
+bag.pred <- predict(bag.titanic, titanic.test,
+                     type = "class")
+table(bag.pred, survived.test)
+mean(bag.pred != survived.test) # Test error rates
+
+# After fitting bagging, the test errors are the same as the full tree (20.23%).
+# This is because the trees generated from bagging might be very similar leading to local optima, not global.
+```
+d) Do the same as c) using the Boosting technique.
+```{r}
+library(caret)
+library(gbm)
+library(stats) 
+library(pROC)
+
+set.seed(1)
+boost.titanic <- gbm(as.integer(survived) - 1 ~ ., data = titanic[train, ],
+                    shrinkage = .02, distribution = 'bernoulli', n.trees = 5000,
+                    verbose = FALSE)
+# For distribution = 'bernoulli', gbm expects y to be 1 and 0 (integer)
+# Note:
+# A regression problem: distribution = "gaussian"
+# A binary classification problem: distribution = "bernoulli"
+# n.trees = 5000 indicates that we want 5000 trees
+# interaction.depth = 4 limits the depth of each tree
+
+summary(boost.titanic)
+# sex, fare, and age are by far the most important variables.
+
+boost.pred <- predict(boost.titanic,
+                      newdata = titanic.test, n.trees = 5000)
+
+# Calculate cut points of boost.pred using ROC
+boost.roc = roc(survived.test,boost.pred) 
+coords(boost.roc,"best") # The best cutpoint is -0.3425848.
+
+boost.pred_label = as.factor(ifelse(boost.pred>-0.3425848,1,0))
+
+head(boost.pred_label)
+
+table(boost.pred_label, survived.test)
+mean(boost.pred_label != survived.test) # Test error rates
+
+# After fitting a boosting tree, the test errors slightly increase from the full tree to be 20.23%.
+
+# Show accuracy
+confusionMatrix(boost.pred_label, survived.test)$overall[1]
+```
+e) Use Random Forests to fit a classification tree.
+```{r}
+set.seed(1)
+rf.titanic <- randomForest(survived ~ ., data = titanic, subset = train, importance = TRUE)
+rf.titanic
+rf.pred <- predict(rf.titanic, titanic.test,
+                     type = "class")
+table(rf.pred, survived.test)
+mean(rf.pred != survived.test) # Test error rates
+
+# For random forest classification trees, I pick # of trees(B) to be a default values 500 
+# and # of predictor = sqrt(p) = sqrt(7).
+
+# The test errors are decreased significantly to 18.7%.
+
+# Feature important
+importance(rf.titanic)
+varImpPlot(rf.titanic)
+```
+f) What characteristics of the dataset and/or the research question that might be driving the differences in misclassification error you are observing in parts b) through e)?\
+
+According to the models, the random forest model  is the best model with about 19% of errors, which slightly lower than other models.
+The main differences of each method from b) through e) are the following.\
+1. The full classification tree fits on a single dataset, which might lead to high variance.
+2. The pruned classification tree still fits on a single dataset but it removes some leaf nodes increasing bias but reducing variance.
+3. For the bagging trees, the trees are grown independently on random samples of the observations. Therefore, the trees tend to be quite similar to each other, and thus more likely to get caught in local optima and can fail to thoroughly explore the model space.
+4. For random forests, similar to bagging, the trees are grown independently on random samples of the observations. However, each split on each tree is performed using a random subset of the features, thereby decorre- lating the trees, and leading to a more thorough exploration of model space relative to bagging.
+5. In boosting, we only use the original data, and do not draw any random samples. The trees are grown successively, using a “slow” learning approach: each new tree is fit to the signal that is left over from the earlier trees, and shrunken down before it is used.
+
+
+g) Fit a logistic model to predict survival on the titanic. 
+```{r}
+# A logistic model
+glm.fits <- glm(
+  survived ~ ., data = titanic,
+  family = binomial
+)
+summary(glm.fits)
+
+# Predict glm
+glm.pred_prop <- predict(glm.fits, newdata = titanic.test, type = "response")
+
+glm.pred <- as.factor(ifelse(glm.pred_prop < 0.5 , "0", "1")) # < 0.5 puts it as "0" else "1"
+
+table(glm.pred, survived.test)
+mean(glm.pred != survived.test) # Test error rates
+
+# Logistic regression is originated by linear regression, but used logistic function to give smooth curves. To fit the model, the method uses # maximum likelihood to estimate betas hat.
+
+# According to the p-values of the logistic regression model, embark has a very high p-values
+# , therefore, I am going to drop the embarked variable and rerun the model.
+
+
+# A logistic model with variable selection
+glm.fits <- glm(
+  survived ~ . - embarked, data = titanic,
+  family = binomial
+)
+summary(glm.fits)
+
+# Predict glm
+glm.pred_prop <- predict(glm.fits, newdata = titanic.test, type = "response")
+
+glm.pred <- as.factor(ifelse(glm.pred_prop < 0.5 , "0", "1")) # < 0.5 puts it as "0" else "1"
+
+table(glm.pred, survived.test)
+mean(glm.pred != survived.test) # Test error rates
+
+# As a result, the test errors are slightly decreased from 20.99% to 20.61%.
+```
+
