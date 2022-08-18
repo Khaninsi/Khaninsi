@@ -1,7 +1,7 @@
 - 👋 Hi, I’m Khanin.
-- 👀 I’m interested in Data Science, NLP, Data Visualization, Financial Analytics, Supply Chain Analytics.
-- 🌱 I was a Data Scientist at SCGC, and I’m currently studying Master Of Science in Analytics at USC.
-- 💞️ I’m looking to collaborate on Data Science projects, focusing on make real world impact.
+- 👀 I’m interested in Data Science, NLP, Data Visualization, Coding, Financial Analytics, Supply Chain Analytics.
+- 🌱 I was a Data Scientist at SCGC, and I’m currently studying Master of Science in Analytics at USC.
+- 💞️ I’m looking to collaborate on Data Science projects, focusing on making real world impact.
 - 📫 How to reach me https://www.linkedin.com/in/khanin-sisaengsuwanchai-b91436150/.
 
 <!---
